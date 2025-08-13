@@ -42,7 +42,7 @@ class AsianAveragingType(Enum):
     GEOMETRIC = 2
     
 class AsianAnalyticalMethod(Enum):
-    GEOMETRIC_MEAN = 1
+    GEOMETRIC = 1
     TURNBULL_WAKEMAN = 2
     CURRAN = 3
 
