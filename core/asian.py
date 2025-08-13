@@ -12,7 +12,7 @@ from utils.enum import (
     MonteCarloMethod,
     PDEScheme,
     AsianAnalyticalMethod )
-from core.base_option import BaseOption
+from core.base import BaseOption
 from utils.error import FinError
 from utils.helper import validate_enum
 
