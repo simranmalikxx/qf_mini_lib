@@ -22,6 +22,7 @@ class AsianOption(BaseOption):
         self,
         strike_type: AsianStrikeType,
         averaging_type: AsianAveragingType,
+        n_avg_points: int,
         analytical_method: AsianAnalyticalMethod = None,
         mc_method: MonteCarloMethod = None,
         pde_scheme: PDEScheme = None,
@@ -36,6 +37,7 @@ class AsianOption(BaseOption):
             
         self.strike_type = strike_type
         self.averaging_type = averaging_type
+        self.n_avg_points = n_avg_points
 
         if self.valuation_type == ValuationType.ANALYTICAL:
             if analytical_method is None:

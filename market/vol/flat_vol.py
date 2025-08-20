@@ -9,7 +9,7 @@ from utils.helper import to_decimal
 
 class FlatVolSurface:
     def __init__(self, vol):
-        v = to_decimal(vol)
+        v = vol
         if v <= 0.0:
             raise FinError(f"Volatility must be positive. Got: {vol}")
         self._vol = v
