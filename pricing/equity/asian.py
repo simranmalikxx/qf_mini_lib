@@ -265,14 +265,15 @@ class AnalyticalAsianPricer:
         # --- Mean of the arithmetic average ---
         mu = (S0 / n) * sum(math.exp((r - q) * t) for t in ti)
 
-        # --- Variance of the arithmetic average ---
+        # --- Variance of the arithmetic average (corrected) ---
         var = 0.0
         for i in range(n):
             for j in range(n):
                 tij = min(ti[i], ti[j])
-                var += math.exp(2 * (r - q) * tij) * math.exp(sigma * sigma * tij)
+                var += math.exp((r - q) * (ti[i] + ti[j])) * (math.exp(sigma * sigma * tij) - 1.0)
+        
+        var = (S0 * S0 / (n * n)) * var
 
-        var = (S0 * S0 / (n * n)) * (var - math.exp(2 * (r - q) * T))
 
         # --- Implied lognormal volatility for forward approximation ---
         sigma_hat = math.sqrt(max(math.log(1.0 + var / (mu * mu)), 1e-18) / T)
@@ -280,7 +281,7 @@ class AnalyticalAsianPricer:
         # --- Forward approximation ---
         F_A = mu
         df_T = disc_curve.discount_factor_T(T)
-
+        
         return AnalyticalAsianPricer._bs_price(F_A, option.strike, sigma_hat, T, option.option_type, df_T)
 
 
@@ -292,9 +293,10 @@ class AnalyticalAsianPricer:
         if option.strike_type is not AsianStrikeType.FIXED:
             raise FinError("Curran implemented for FIXED strike Asians")
 
-        T = option.maturity
+        valuation = disc_curve.as_of
+        T = valuation.years_between(option.maturity)
         n = _get_n_obs(option)
-        df_T = disc_curve.df(T)
+        df_T = disc_curve.discount_factor_T(T)
 
         # effective geometric approximation
         sigma_g = sigma * math.sqrt((n + 1) * (2 * n + 1) / (6 * n * n))
