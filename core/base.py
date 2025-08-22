@@ -29,7 +29,7 @@ class BaseOption(ABC):
         if not validate_enum(valuation_type, ValuationType):
             raise FinError(f"Invalid ValuationType: {valuation_type}. Valid types: {list(ValuationType)}")
         
-        if strike <= 0:
+        if strike < 0:
             raise FinError(f"Strike price must be positive. Got: {strike}")
 
         if not isinstance(maturity, Date):

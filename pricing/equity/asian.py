@@ -43,11 +43,21 @@ from market.utils import extract_pricing_inputs
 # -------------------------
 def _get_averaging(option: AsianOption) -> AsianAveragingType:
     # supports either .averaging or .averaging_type
-    return getattr(option, "averaging", getattr(option, "averaging_type"))
+    if hasattr(option, "averaging"):
+        return option.averaging
+    elif hasattr(option, "averaging_type"):
+        return option.averaging_type
+    else:
+        raise FinError("Option must have either averaging or averaging_type")
 
 def _get_n_obs(option: AsianOption) -> int:
     # supports either .n_obs or .n_avg_points
-    return getattr(option, "n_obs", getattr(option, "n_avg_points"))
+    if hasattr(option, "n_obs"):
+        return option.n_obs
+    elif hasattr(option, "n_avg_points"):
+        return option.n_avg_points
+    else:
+        raise FinError("Option must have either n_obs or n_avg_points")
 
 # =========================
 # Main entry point
@@ -331,19 +341,20 @@ class MonteCarloAsianPricer:
     ) -> float:
         validate_enum(mc_method, MonteCarloMethod)
 
-        T = option.maturity
+        valuation = disc_curve.as_of
+        T = valuation.years_between(option.maturity)
         n_obs = _get_n_obs(option)
         obs_times = np.linspace(T / n_obs, T, n_obs)  # observation dates (exclude 0)
 
         if mc_method is MonteCarloMethod.STANDARD:
             paths = _simulate_paths(S0, r, q, sigma, obs_times, num_paths, seed)
             payoffs = _asian_payoff_from_paths(paths, option)
-            return float(disc_curve.df(T) * np.mean(payoffs))
+            return float(disc_curve.discount_factor_T(T) * np.mean(payoffs))
 
         if mc_method is MonteCarloMethod.ANTITHETIC:
             paths = _simulate_paths(S0, r, q, sigma, obs_times, num_paths // 2, seed, antithetic=True)
             payoffs = _asian_payoff_from_paths(paths, option)
-            return float(disc_curve.df(T) * np.mean(payoffs))
+            return float(disc_curve.discount_factor_T(T) * np.mean(payoffs))
 
         if mc_method is MonteCarloMethod.CONTROL_VARIATE:
             # Only valid for Arithmetic Fixed Asians
@@ -363,7 +374,7 @@ class MonteCarloAsianPricer:
                 strike=option.strike,
                 maturity=option.maturity,
                 n_obs=n_obs,
-                exercise=option.exercise,
+                exercise_type=option.exercise_type,
             )
             EX = AnalyticalAsianPricer._geometric_closed_form(geom_option, S0, r, q, sigma, disc_curve)
             payoffs_geom = _asian_payoff(geom_option, A_arith, A_geom, S_T)
@@ -373,7 +384,7 @@ class MonteCarloAsianPricer:
             varX = np.var(payoffs_geom)
             beta = 0.0 if varX == 0 else cov / varX
             Y_cv = payoffs_arith - beta * (payoffs_geom - EX)
-            return float(disc_curve.df(T) * np.mean(Y_cv))
+            return float(disc_curve.discount_factor_T(T) * np.mean(Y_cv))
 
         if mc_method is MonteCarloMethod.QUASI_RANDOM:
             # If scipy qmc available, use Sobol; else fall back
@@ -382,7 +393,7 @@ class MonteCarloAsianPricer:
             except Exception:
                 paths = _simulate_paths(S0, r, q, sigma, obs_times, num_paths, seed)
             payoffs = _asian_payoff_from_paths(paths, option)
-            return float(disc_curve.df(T) * np.mean(payoffs))
+            return float(disc_curve.discount_factor_T(T) * np.mean(payoffs))
 
         raise FinError(f"Unsupported MonteCarloMethod: {mc_method}")
 
@@ -448,6 +459,7 @@ def _asian_payoff_from_paths(paths: np.ndarray, option: AsianOption):
 
 def _asian_payoff(option: AsianOption, A_arith, A_geom, S_T):
     """Compute payoff for an Asian option from averages and S_T."""
+    # choose the averaging measure to use in the payoff
     averaging = _get_averaging(option)
     if averaging is AsianAveragingType.ARITHMETIC:
         A = A_arith
@@ -456,19 +468,28 @@ def _asian_payoff(option: AsianOption, A_arith, A_geom, S_T):
     else:
         raise FinError("Unsupported averaging type")
 
+    # Fixed vs Floating strike payoff definitions:
+    #  - Fixed:  Call = max(A - K, 0),  Put = max(K - A, 0)
+    #  - Floating: Call = max(S_T - A, 0), Put = max(A - S_T, 0)
     if option.strike_type is AsianStrikeType.FIXED:
-        strike = option.strike
+        K = option.strike
+        if option.option_type is OptionType.CALL:
+            return np.maximum(A - K, 0.0)
+        elif option.option_type is OptionType.PUT:
+            return np.maximum(K - A, 0.0)
+        else:
+            raise FinError("Unsupported option type")
+
     elif option.strike_type is AsianStrikeType.FLOATING:
-        strike = A
+        if option.option_type is OptionType.CALL:
+            return np.maximum(S_T - A, 0.0)
+        elif option.option_type is OptionType.PUT:
+            return np.maximum(A - S_T, 0.0)
+        else:
+            raise FinError("Unsupported option type")
+
     else:
         raise FinError("Unsupported strike type")
-
-    if option.option_type is OptionType.CALL:
-        return np.maximum(A - strike, 0.0)
-    elif option.option_type is OptionType.PUT:
-        return np.maximum(strike - A, 0.0)
-    else:
-        raise FinError("Unsupported option type")
 
 # =========================
 # PDE (Geometric, Floating-strike)

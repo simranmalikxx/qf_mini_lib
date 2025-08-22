@@ -35,6 +35,9 @@ class AsianOption(BaseOption):
         if not validate_enum(averaging_type, AsianAveragingType):
             raise FinError(f"Invalid AsianAveragingType: {averaging_type}. Valid types: {list(AsianAveragingType)}")
             
+        if strike_type == AsianStrikeType.FIXED and self.strike <= 0:
+            raise FinError(f"Strike price must be positive for FIXED strike. Got: {self.strike}")
+            
         self.strike_type = strike_type
         self.averaging_type = averaging_type
         self.n_avg_points = n_avg_points
